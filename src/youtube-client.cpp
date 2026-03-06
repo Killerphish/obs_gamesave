@@ -28,6 +28,8 @@ the Free Software Foundation; either version 2 of the License, or
 static const char kAuthEndpoint[] = "https://accounts.google.com/o/oauth2/v2/auth";
 static const char kTokenEndpoint[] = "https://oauth2.googleapis.com/token";
 static const char kScope[] = "https://www.googleapis.com/auth/youtube.force-ssl";
+// Fixed port so redirect_uri can be registered in Google Cloud Console (Authorized redirect URIs).
+static const quint16 kOAuthRedirectPort = 8765;
 static const char kLiveBroadcastsUrl[] = "https://www.googleapis.com/youtube/v3/liveBroadcasts";
 static const char kLiveStreamsUrl[] = "https://www.googleapis.com/youtube/v3/liveStreams";
 static const char kThumbnailsSetUrl[] = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set";
@@ -160,14 +162,14 @@ void YouTubeApiClient::startAuth()
 		return;
 	}
 
-	if (!m_redirectServer->listen(QHostAddress::LocalHost, 0)) {
-		m_authError = QObject::tr("Could not start local server for OAuth redirect.");
+	if (!m_redirectServer->listen(QHostAddress::LocalHost, kOAuthRedirectPort)) {
+		m_authError = QObject::tr("Could not start local server for OAuth redirect (port %1 may be in use).").arg(kOAuthRedirectPort);
 		emit authFinished(false);
 		return;
 	}
 
-	quint16 port = m_redirectServer->serverPort();
-	QString redirectUri = QString("http://127.0.0.1:%1/").arg(port);
+	// Use localhost so it matches Google's default for Desktop apps; exact URI must be in Authorized redirect URIs.
+	QString redirectUri = QString("http://localhost:%1/").arg(kOAuthRedirectPort);
 	QUrlQuery q;
 	q.addQueryItem("client_id", m_clientId);
 	q.addQueryItem("redirect_uri", redirectUri);
@@ -229,12 +231,7 @@ void YouTubeApiClient::openAuthUrl()
 
 void YouTubeApiClient::exchangeCodeForTokens(const QString &code)
 {
-	QString redirectUri;
-	if (m_redirectServer->serverPort() != 0) {
-		redirectUri = QString("http://127.0.0.1:%1/").arg(m_redirectServer->serverPort());
-	} else {
-		redirectUri = "http://127.0.0.1/";
-	}
+	QString redirectUri = QString("http://localhost:%1/").arg(kOAuthRedirectPort);
 
 	QUrl url(QString::fromLatin1(kTokenEndpoint));
 	QNetworkRequest req(url);
@@ -267,6 +264,16 @@ void YouTubeApiClient::exchangeCodeForTokens(const QString &code)
 			return;
 		}
 		QJsonObject o = doc.object();
+		QString err = o.value("error").toString();
+		if (!err.isEmpty()) {
+			QString desc = o.value("error_description").toString();
+			m_authError = desc.isEmpty() ? err : QString("%1: %2").arg(err, desc);
+			if (err == "invalid_client") {
+				m_authError += QObject::tr("\n\nAdd this exact URI in Google Cloud Console → Credentials → your OAuth client → Authorized redirect URIs:\nhttp://localhost:%1/").arg(kOAuthRedirectPort);
+			}
+			emit authFinished(false);
+			return;
+		}
 		m_accessToken = o.value("access_token").toString();
 		m_refreshToken = o.value("refresh_token").toString();
 		if (m_refreshToken.isEmpty()) {
