@@ -15,6 +15,8 @@ function(set_target_properties_plugin target)
 
   # OBS provides symbols (e.g. obs_current_module) when the plugin bundle is loaded.
   target_link_options(${target} PRIVATE "LINKER:-undefined,dynamic_lookup")
+  # So the plugin can find AGL (stub) inside its own bundle when loaded from the plugins folder.
+  target_link_options(${target} PRIVATE "LINKER:-rpath,@loader_path/../Frameworks/AGL.framework")
 
   while(_STPO_PROPERTIES)
     list(POP_FRONT _STPO_PROPERTIES key value)
@@ -47,6 +49,18 @@ function(set_target_properties_plugin target)
 
   if(TARGET plugin-support)
     target_link_libraries(${target} PRIVATE plugin-support)
+  endif()
+
+  # Embed AGL.framework (stub) in the plugin bundle so it loads when installed under obs-studio/plugins.
+  if(TARGET agl_stub)
+    add_custom_command(
+      TARGET ${target}
+      POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_BUNDLE_DIR:${target}>/Contents/Frameworks"
+      COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_BINARY_DIR}/AGL.framework" "$<TARGET_BUNDLE_DIR:${target}>/Contents/Frameworks/AGL.framework"
+      COMMENT "Embed AGL.framework in plugin bundle"
+      VERBATIM
+    )
   endif()
 
   target_install_resources(${target})

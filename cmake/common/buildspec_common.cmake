@@ -278,6 +278,16 @@ function(_check_dependencies)
 
     file(WRITE "${dependencies_dir}/.dependency_${dependency}_${arch}.sha256" "${hash}")
 
+    # OBS 32+ adds libobs-metal (Swift); skip it when building without frontend to avoid Swift/linker config.
+    if(dependency STREQUAL obs-studio AND version VERSION_GREATER_EQUAL "32.0.0")
+      set(_obs_cmakelists "${dependencies_dir}/${destination}/CMakeLists.txt")
+      file(READ "${_obs_cmakelists}" _obs_cmake_content)
+      string(REPLACE "if(OS_MACOS)\n  add_subdirectory(libobs-metal)\nendif()"
+        "if(OS_MACOS AND ENABLE_FRONTEND)\n  add_subdirectory(libobs-metal)\nendif()"
+        _obs_cmake_content "${_obs_cmake_content}")
+      file(WRITE "${_obs_cmakelists}" "${_obs_cmake_content}")
+    endif()
+
     if(dependency STREQUAL prebuilt)
       list(APPEND CMAKE_PREFIX_PATH "${dependencies_dir}/${destination}")
     elseif(dependency STREQUAL qt6)
