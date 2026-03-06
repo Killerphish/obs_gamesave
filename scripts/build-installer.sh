@@ -21,31 +21,40 @@ RESOURCES="$APP_PATH/Contents/Resources"
 
 cd "$ROOT"
 
-# 1. Build plugin if not present (optional: requires cmake and full OBS build)
+# 1. Build plugin if not present (required so the installer always includes the plugin)
 if [[ ! -d "$PLUGIN_PATH" ]]; then
   echo "==> Building GameSave plugin..."
-  if "$SCRIPT_DIR/build.sh"; then
-    echo "    Plugin built."
-  else
-    echo "    Warning: plugin build failed (e.g. cmake not in PATH). Installer app will run; use 'Choose Plugin…' to pick a game-save.plugin from disk if needed."
+  if ! "$SCRIPT_DIR/build.sh"; then
+    echo ""
+    echo "Error: Plugin build failed. The installer must include the plugin."
+    echo "  - Install Command Line Tools: xcode-select --install"
+    echo "  - Ensure CMake and Ninja are available (e.g. brew install cmake ninja)"
+    echo "  - Then run: $SCRIPT_DIR/build-installer.sh"
+    exit 1
   fi
-else
-  echo "==> Using existing plugin: $PLUGIN_PATH"
+  echo "    Plugin built."
+  # Re-detect path in case build put it somewhere else
+  PLUGIN_PATH=""
+  if [[ -d "$ROOT/build_macos" ]]; then
+    PLUGIN_PATH="$(find "$ROOT/build_macos" -maxdepth 4 -type d -name "game-save.plugin" 2>/dev/null | head -1)"
+  fi
+  [[ -z "$PLUGIN_PATH" || ! -d "$PLUGIN_PATH" ]] && PLUGIN_PATH="$ROOT/build_macos/RelWithDebInfo/game-save.plugin"
 fi
+if [[ ! -d "$PLUGIN_PATH" ]]; then
+  echo "Error: Plugin not found at $PLUGIN_PATH after build. Cannot create installer." >&2
+  exit 1
+fi
+echo "==> Using plugin: $PLUGIN_PATH"
 
 # 2. Build installer app with swiftc (reliable; xcodebuild often fails with plugin errors)
 echo "==> Building GameSave Installer app (swiftc)..."
 "$SCRIPT_DIR/build-installer-app.sh"
 
-# 3. Copy plugin into app bundle when available
-if [[ -d "$PLUGIN_PATH" ]]; then
-  echo "==> Embedding plugin in installer app..."
-  mkdir -p "$RESOURCES"
-  rm -rf "$RESOURCES/game-save.plugin"
-  cp -R "$PLUGIN_PATH" "$RESOURCES/"
-else
-  echo "==> Skipping plugin embed (plugin not built). Run the app and use 'Choose Plugin…' to select a plugin if needed."
-fi
+# 3. Embed plugin in app bundle (required)
+echo "==> Embedding plugin in installer app..."
+mkdir -p "$RESOURCES"
+rm -rf "$RESOURCES/game-save.plugin"
+cp -R "$PLUGIN_PATH" "$RESOURCES/"
 
 echo "==> Done."
 APP_PATH_ABS="$ROOT/installer/build/Release/GameSave Installer.app"

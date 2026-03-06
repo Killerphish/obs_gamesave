@@ -45,6 +45,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   src/load-broadcast-dialog.hpp
   src/schedule-broadcast-dialog.cpp
   src/schedule-broadcast-dialog.hpp
+  src/tournament-weekend-dialog.cpp
+  src/tournament-weekend-dialog.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

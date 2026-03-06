@@ -51,6 +51,7 @@ private:
 	void refreshBroadcastList();
 	void onBroadcastSelectionChanged(int index);
 	void onLoadOrNewClicked();
+	void onSetupWeekendClicked();
 	void onBroadcastsListed(const QList<YouTubeBroadcast> &broadcasts);
 	void onStreamKeyReceived(const YouTubeStreamKey &key);
 	void onYtError(const QString &message);
@@ -59,7 +60,8 @@ private:
 
 	QComboBox *m_broadcastCombo = nullptr;
 	QPushButton *m_loadOrNewButton = nullptr;
-	QPushButton *m_refreshYtButton = nullptr;
+	QPushButton *	m_refreshYtButton = nullptr;
+	QPushButton *m_weekendButton = nullptr;
 	QLineEdit *m_tournamentNameEdit = nullptr;
 	QLineEdit *m_basePathEdit = nullptr;
 	QPushButton *m_readYtButton = nullptr;

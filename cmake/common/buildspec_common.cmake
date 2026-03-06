@@ -48,6 +48,7 @@ endfunction()
 
 # _setup_obs_studio: Create obs-studio build project, then build libobs and obs-frontend-api
 function(_setup_obs_studio)
+  set(_obs_use_ninja FALSE)
   if(NOT libobs_DIR)
     set(_is_fresh --fresh)
   endif()
@@ -57,63 +58,126 @@ function(_setup_obs_studio)
     set(_cmake_arch "-A ${arch},version=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
     set(_cmake_extra "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION} -DCMAKE_ENABLE_SCRIPTING=OFF")
   elseif(OS_MACOS)
-    set(_cmake_generator "Xcode")
-    set(_cmake_arch "-DCMAKE_OSX_ARCHITECTURES:STRING='arm64;x86_64'")
+    # Use Ninja so we don't require Xcode (avoids broken IDESimulatorFoundation/DVTDownloads).
+    set(_cmake_generator "Ninja")
+    set(_cmake_arch "-DCMAKE_OSX_ARCHITECTURES:STRING=arm64;x86_64")
     set(_cmake_extra "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    if(CMAKE_C_COMPILER)
+      list(APPEND _cmake_extra "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}")
+    endif()
+    if(CMAKE_CXX_COMPILER)
+      list(APPEND _cmake_extra "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
+    endif()
+    set(_obs_use_ninja TRUE)
   endif()
 
-  message(STATUS "Configure ${label} (${arch})")
-  execute_process(
-    COMMAND
-      "${CMAKE_COMMAND}" -S "${dependencies_dir}/${_obs_destination}" -B
-      "${dependencies_dir}/${_obs_destination}/build_${arch}" -G ${_cmake_generator} "${_cmake_arch}"
-      -DOBS_CMAKE_VERSION:STRING=3.0.0 -DENABLE_PLUGINS:BOOL=OFF -DENABLE_FRONTEND:BOOL=OFF
-      -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH='${CMAKE_PREFIX_PATH}'" ${_is_fresh}
-      ${_cmake_extra}
-    RESULT_VARIABLE _process_result
-    COMMAND_ERROR_IS_FATAL ANY
-    OUTPUT_QUIET
-  )
-  message(STATUS "Configure ${label} (${arch}) - done")
+  if(_obs_use_ninja)
+    # Use Command Line Tools only so Xcode.app (and its broken IDESimulatorFoundation) is never loaded.
+    set(_clt_dir "/Library/Developer/CommandLineTools")
+    if(NOT EXISTS "${_clt_dir}/usr/bin/clang")
+      message(
+        FATAL_ERROR
+        "Command Line Tools required for OBS build (Xcode generator disabled). "
+        "Install with: xcode-select --install"
+      )
+    endif()
+    set(ENV{DEVELOPER_DIR} "${_clt_dir}")
+    # Ninja is single-config: one configure/build/install per configuration.
+    set(_obs_configs Debug Release)
+    foreach(_cfg IN LISTS _obs_configs)
+      set(_bdir "build_${arch}_${_cfg}")
+      message(STATUS "Configure ${label} (${arch} - ${_cfg})")
+      execute_process(
+        COMMAND
+          "${CMAKE_COMMAND}" -S "${dependencies_dir}/${_obs_destination}" -B
+          "${dependencies_dir}/${_obs_destination}/${_bdir}" -G Ninja "${_cmake_arch}"
+          -DCMAKE_BUILD_TYPE=${_cfg}
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
+          -DOBS_CMAKE_VERSION:STRING=3.0.0 -DENABLE_PLUGINS:BOOL=OFF -DENABLE_FRONTEND:BOOL=OFF
+          -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" ${_is_fresh}
+          ${_cmake_extra}
+        RESULT_VARIABLE _process_result
+        COMMAND_ERROR_IS_FATAL ANY
+        OUTPUT_QUIET
+      )
+      message(STATUS "Configure ${label} (${arch} - ${_cfg}) - done")
 
-  message(STATUS "Build ${label} (Debug - ${arch})")
-  execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build build_${arch} --target obs-frontend-api --config Debug --parallel
-    WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
-    RESULT_VARIABLE _process_result
-    COMMAND_ERROR_IS_FATAL ANY
-    OUTPUT_QUIET
-  )
-  message(STATUS "Build ${label} (Debug - ${arch}) - done")
+      message(STATUS "Build ${label} (${_cfg} - ${arch})")
+      execute_process(
+        COMMAND "${CMAKE_COMMAND}" --build ${_bdir} --target obs-frontend-api --parallel
+        WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
+        RESULT_VARIABLE _process_result
+        COMMAND_ERROR_IS_FATAL ANY
+        OUTPUT_QUIET
+      )
+      message(STATUS "Build ${label} (${_cfg} - ${arch}) - done")
 
-  message(STATUS "Build ${label} (Release - ${arch})")
-  execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build build_${arch} --target obs-frontend-api --config Release --parallel
-    WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
-    RESULT_VARIABLE _process_result
-    COMMAND_ERROR_IS_FATAL ANY
-    OUTPUT_QUIET
-  )
-  message(STATUS "Build ${label} (Reelase - ${arch}) - done")
+      message(STATUS "Install ${label} (${_cfg} - ${arch})")
+      execute_process(
+        COMMAND
+          "${CMAKE_COMMAND}" --install ${_bdir} --component Development --prefix "${dependencies_dir}"
+        WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
+        RESULT_VARIABLE _process_result
+        COMMAND_ERROR_IS_FATAL ANY
+        OUTPUT_QUIET
+      )
+      message(STATUS "Install ${label} (${_cfg} - ${arch}) - done")
+    endforeach()
+    unset(ENV{DEVELOPER_DIR})
+  else()
+    message(STATUS "Configure ${label} (${arch})")
+    execute_process(
+      COMMAND
+        "${CMAKE_COMMAND}" -S "${dependencies_dir}/${_obs_destination}" -B
+        "${dependencies_dir}/${_obs_destination}/build_${arch}" -G ${_cmake_generator} "${_cmake_arch}"
+        -DOBS_CMAKE_VERSION:STRING=3.0.0 -DENABLE_PLUGINS:BOOL=OFF -DENABLE_FRONTEND:BOOL=OFF
+        -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH='${CMAKE_PREFIX_PATH}'" ${_is_fresh}
+        ${_cmake_extra}
+      RESULT_VARIABLE _process_result
+      COMMAND_ERROR_IS_FATAL ANY
+      OUTPUT_QUIET
+    )
+    message(STATUS "Configure ${label} (${arch}) - done")
 
-  message(STATUS "Install ${label} (${arch})")
-  execute_process(
-    COMMAND
-      "${CMAKE_COMMAND}" --install build_${arch} --component Development --config Debug --prefix "${dependencies_dir}"
-    WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
-    RESULT_VARIABLE _process_result
-    COMMAND_ERROR_IS_FATAL ANY
-    OUTPUT_QUIET
-  )
-  execute_process(
-    COMMAND
-      "${CMAKE_COMMAND}" --install build_${arch} --component Development --config Release --prefix "${dependencies_dir}"
-    WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
-    RESULT_VARIABLE _process_result
-    COMMAND_ERROR_IS_FATAL ANY
-    OUTPUT_QUIET
-  )
-  message(STATUS "Install ${label} (${arch}) - done")
+    message(STATUS "Build ${label} (Debug - ${arch})")
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" --build build_${arch} --target obs-frontend-api --config Debug --parallel
+      WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
+      RESULT_VARIABLE _process_result
+      COMMAND_ERROR_IS_FATAL ANY
+      OUTPUT_QUIET
+    )
+    message(STATUS "Build ${label} (Debug - ${arch}) - done")
+
+    message(STATUS "Build ${label} (Release - ${arch})")
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" --build build_${arch} --target obs-frontend-api --config Release --parallel
+      WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
+      RESULT_VARIABLE _process_result
+      COMMAND_ERROR_IS_FATAL ANY
+      OUTPUT_QUIET
+    )
+    message(STATUS "Build ${label} (Release - ${arch}) - done")
+
+    message(STATUS "Install ${label} (${arch})")
+    execute_process(
+      COMMAND
+        "${CMAKE_COMMAND}" --install build_${arch} --component Development --config Debug --prefix "${dependencies_dir}"
+      WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
+      RESULT_VARIABLE _process_result
+      COMMAND_ERROR_IS_FATAL ANY
+      OUTPUT_QUIET
+    )
+    execute_process(
+      COMMAND
+        "${CMAKE_COMMAND}" --install build_${arch} --component Development --config Release --prefix "${dependencies_dir}"
+      WORKING_DIRECTORY "${dependencies_dir}/${_obs_destination}"
+      RESULT_VARIABLE _process_result
+      COMMAND_ERROR_IS_FATAL ANY
+      OUTPUT_QUIET
+    )
+    message(STATUS "Install ${label} (${arch}) - done")
+  endif()
 endfunction()
 
 # _check_dependencies: Fetch and extract pre-built OBS build dependencies

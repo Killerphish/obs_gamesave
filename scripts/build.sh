@@ -25,29 +25,44 @@ else
   echo "==> Using cmake: $CMAKE"
 fi
 
-# On macOS, ensure CMake can find the C/C++ compilers (Xcode or Command Line Tools)
+# On macOS, use Command Line Tools only so Xcode.app (and broken IDESimulatorFoundation) is never loaded
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  CLANG_C=""
-  CLANG_CXX=""
-  if [[ -x /usr/bin/clang ]]; then
-    CLANG_C=/usr/bin/clang
-    CLANG_CXX=/usr/bin/clang++
-  fi
-  if [[ -z "$CLANG_C" ]]; then
-    XCODE_SELECT="$(xcode-select -p 2>/dev/null)"
-    if [[ -n "$XCODE_SELECT" && -x "$XCODE_SELECT/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" ]]; then
-      CLANG_C="$XCODE_SELECT/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
-      CLANG_CXX="$XCODE_SELECT/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++"
+  CLT_DIR="/Library/Developer/CommandLineTools"
+  if [[ -x "$CLT_DIR/usr/bin/clang" ]]; then
+    export DEVELOPER_DIR="$CLT_DIR"
+    CLANG_C="$CLT_DIR/usr/bin/clang"
+    CLANG_CXX="$CLT_DIR/usr/bin/clang++"
+    echo "==> Using Command Line Tools (DEVELOPER_DIR=$CLT_DIR)"
+  else
+    CLANG_C=""
+    CLANG_CXX=""
+    if [[ -x /usr/bin/clang ]]; then
+      CLANG_C=/usr/bin/clang
+      CLANG_CXX=/usr/bin/clang++
+    fi
+    if [[ -z "$CLANG_C" ]]; then
+      XCODE_SELECT="$(xcode-select -p 2>/dev/null)"
+      if [[ -n "$XCODE_SELECT" && -x "$XCODE_SELECT/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" ]]; then
+        CLANG_C="$XCODE_SELECT/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+        CLANG_CXX="$XCODE_SELECT/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++"
+      fi
+    fi
+    if [[ -z "$CLANG_C" || ! -x "$CLANG_C" ]]; then
+      echo "Error: No C/C++ compiler found. Install Xcode Command Line Tools: xcode-select --install" >&2
+      exit 1
     fi
   fi
-  if [[ -z "$CLANG_C" || ! -x "$CLANG_C" ]]; then
-    echo "Error: No C/C++ compiler found. Install Xcode Command Line Tools: xcode-select --install" >&2
-    exit 1
-  fi
-  export CMAKE_C_COMPILER="$CLANG_C"
-  export CMAKE_CXX_COMPILER="$CLANG_CXX"
-  CMAKE_CC_ARGS=(-DCMAKE_C_COMPILER="$CLANG_C" -DCMAKE_CXX_COMPILER="$CLANG_CXX")
+  export CMAKE_C_COMPILER="${CLANG_C}"
+  export CMAKE_CXX_COMPILER="${CLANG_CXX}"
+  CMAKE_CC_ARGS=(-DCMAKE_C_COMPILER="${CLANG_C}" -DCMAKE_CXX_COMPILER="${CLANG_CXX}")
   echo "==> Using C compiler: $CMAKE_C_COMPILER"
+fi
+
+# If build dir was previously configured with Xcode but we use Ninja preset, clear cache to avoid generator mismatch
+BUILD_DIR="$ROOT/build_macos"
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] && grep -q "CMAKE_GENERATOR:INTERNAL=Xcode" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
+  echo "==> Clearing Xcode cache so Ninja preset can configure..."
+  rm -rf "$BUILD_DIR/CMakeCache.txt" "$BUILD_DIR/CMakeFiles"
 fi
 
 echo "==> Configuring (macOS preset)..."

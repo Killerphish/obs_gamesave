@@ -5,8 +5,9 @@ include_guard(GLOBAL)
 option(ENABLE_COMPILER_TRACE "Enable clang time-trace" OFF)
 mark_as_advanced(ENABLE_COMPILER_TRACE)
 
-if(NOT XCODE)
-  message(FATAL_ERROR "Building OBS Studio on macOS requires Xcode generator.")
+# Xcode generator required for full OBS Studio; Ninja allowed for standalone plugin build
+if(NOT XCODE AND NOT CMAKE_GENERATOR STREQUAL "Ninja")
+  message(FATAL_ERROR "Building OBS Studio on macOS requires Xcode or Ninja generator.")
 endif()
 
 include(ccache)
@@ -23,13 +24,24 @@ function(check_sdk_requirements)
     OUTPUT_VARIABLE obs_macos_current_sdk
     RESULT_VARIABLE result
     OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
   )
   if(NOT result EQUAL 0)
-    message(
-      FATAL_ERROR
-      "Failed to fetch macOS SDK version. "
-      "Ensure that the macOS SDK is installed and that xcode-select points at the Xcode developer directory."
+    # Command Line Tools SDK does not support --show-sdk-platform-version; use --show-sdk-version instead
+    execute_process(
+      COMMAND xcrun --sdk macosx --show-sdk-version
+      OUTPUT_VARIABLE obs_macos_current_sdk
+      RESULT_VARIABLE result
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
     )
+    if(NOT result EQUAL 0)
+      message(
+        FATAL_ERROR
+        "Failed to fetch macOS SDK version. "
+        "Ensure that the macOS SDK is installed (Xcode or Command Line Tools: xcode-select --install)."
+      )
+    endif()
   endif()
   message(DEBUG "macOS SDK version: ${obs_macos_current_sdk}")
   if(obs_macos_current_sdk VERSION_LESS obs_macos_minimum_sdk)
@@ -39,20 +51,22 @@ function(check_sdk_requirements)
       "The macOS ${obs_macos_minimum_sdk} SDK (Xcode ${obs_macos_minimum_xcode}) is required to build OBS."
     )
   endif()
-  execute_process(COMMAND xcrun --find xcodebuild OUTPUT_VARIABLE obs_macos_xcodebuild RESULT_VARIABLE result)
-  if(NOT result EQUAL 0)
-    message(
-      FATAL_ERROR
-      "Xcode was not found. "
-      "Ensure you have installed Xcode and that xcode-select points at the Xcode developer directory."
-    )
-  endif()
-  message(DEBUG "Path to xcodebuild binary: ${obs_macos_xcodebuild}")
-  if(XCODE_VERSION VERSION_LESS obs_macos_minimum_xcode)
-    message(
-      FATAL_ERROR
-      "Your Xcode version (${XCODE_VERSION}) is too low. Xcode ${obs_macos_minimum_xcode} is required to build OBS."
-    )
+  if(XCODE)
+    execute_process(COMMAND xcrun --find xcodebuild OUTPUT_VARIABLE obs_macos_xcodebuild RESULT_VARIABLE result)
+    if(NOT result EQUAL 0)
+      message(
+        FATAL_ERROR
+        "Xcode was not found. "
+        "Ensure you have installed Xcode and that xcode-select points at the Xcode developer directory."
+      )
+    endif()
+    message(DEBUG "Path to xcodebuild binary: ${obs_macos_xcodebuild}")
+    if(XCODE_VERSION VERSION_LESS obs_macos_minimum_xcode)
+      message(
+        FATAL_ERROR
+        "Your Xcode version (${XCODE_VERSION}) is too low. Xcode ${obs_macos_minimum_xcode} is required to build OBS."
+      )
+    endif()
   endif()
 endfunction()
 

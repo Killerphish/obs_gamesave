@@ -12,6 +12,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include "youtube-client.hpp"
 #include "load-broadcast-dialog.hpp"
 #include "schedule-broadcast-dialog.hpp"
+#include "tournament-weekend-dialog.hpp"
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <obs.h>
@@ -49,6 +50,10 @@ GameSaveDock::GameSaveDock(QWidget *parent) : QWidget(parent)
 	m_refreshYtButton->setToolTip(tr("Refresh list of YouTube broadcasts"));
 	broadcastRow->addWidget(m_refreshYtButton);
 
+	m_weekendButton = new QPushButton(tr("Setup weekend"), this);
+	m_weekendButton->setToolTip(tr("Setup multiple streams for a tournament weekend"));
+	broadcastRow->addWidget(m_weekendButton);
+
 	QPushButton *signInButton = new QPushButton(tr("Sign in with YouTube"), this);
 	signInButton->setToolTip(tr("Sign in to list and manage YouTube broadcasts"));
 	broadcastRow->addWidget(signInButton);
@@ -57,6 +62,7 @@ GameSaveDock::GameSaveDock(QWidget *parent) : QWidget(parent)
 	connect(m_broadcastCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &GameSaveDock::onBroadcastSelectionChanged);
 	connect(m_loadOrNewButton, &QPushButton::clicked, this, &GameSaveDock::onLoadOrNewClicked);
 	connect(m_refreshYtButton, &QPushButton::clicked, this, [this]() { refreshBroadcastList(); });
+	connect(m_weekendButton, &QPushButton::clicked, this, &GameSaveDock::onSetupWeekendClicked);
 	connect(signInButton, &QPushButton::clicked, this, [this]() {
 		m_ytClient->startAuth();
 	});
@@ -195,6 +201,16 @@ void GameSaveDock::onLoadOrNewClicked()
 
 	connect(m_ytClient, &YouTubeApiClient::streamKeyReceived, this, &GameSaveDock::onStreamKeyReceived);
 	m_ytClient->fetchStreamKey(broadcastId, boundStreamId);
+}
+
+void GameSaveDock::onSetupWeekendClicked()
+{
+	TournamentWeekendDialog dlg(m_ytClient, this);
+	connect(&dlg, &TournamentWeekendDialog::refreshRequested, this, &GameSaveDock::refreshBroadcastList);
+	dlg.exec();
+	if (dlg.broadcastsCreated()) {
+		refreshBroadcastList();
+	}
 }
 
 void GameSaveDock::onBroadcastsListed(const QList<YouTubeBroadcast> &broadcasts)
