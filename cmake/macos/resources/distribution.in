@@ -14,6 +14,11 @@
         <pkg-ref id="@MACOS_BUNDLEID@" />
     </choice>
     <pkg-ref id="@MACOS_BUNDLEID@" version="@CMAKE_PROJECT_VERSION@">#@CMAKE_PROJECT_NAME@.pkg</pkg-ref>
+    <pkg-ref id="@MACOS_BUNDLEID@">
+        <must-close>
+            <app id="com.obsproject.obs-studio"/>
+        </must-close>
+    </pkg-ref>
     <installation-check script="installCheck();" />
     <script>
         function installCheck() {
