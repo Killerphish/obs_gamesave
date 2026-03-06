@@ -78,6 +78,17 @@ void YouTubeApiClient::loadClientCredentials()
 	QJsonObject o = doc.object();
 	QString id = o.value("client_id").toString().trimmed();
 	QString secret = o.value("client_secret").toString().trimmed();
+	// Google's downloaded JSON uses "installed" (Desktop) or "web" with nested client_id/client_secret
+	if (id.isEmpty() && o.contains("installed")) {
+		QJsonObject inst = o.value("installed").toObject();
+		id = inst.value("client_id").toString().trimmed();
+		secret = inst.value("client_secret").toString().trimmed();
+	}
+	if (id.isEmpty() && o.contains("web")) {
+		QJsonObject web = o.value("web").toObject();
+		id = web.value("client_id").toString().trimmed();
+		secret = web.value("client_secret").toString().trimmed();
+	}
 	if (!id.isEmpty() && id != QLatin1String(kDefaultClientId)) {
 		m_clientId = id;
 		m_clientSecret = secret;
