@@ -22,8 +22,25 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
+  # On macOS, Qt's config links -framework AGL which was removed from recent SDKs. Build a stub so the link succeeds.
+  if(OS_MACOS)
+    add_library(agl_stub SHARED cmake/agl_stub/agl_stub.c)
+    set_target_properties(agl_stub PROPERTIES
+      OUTPUT_NAME AGL
+      PREFIX ""
+      SUFFIX ""
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/AGL.framework"
+      INSTALL_NAME_DIR "@rpath/AGL.framework"
+      MACOSX_RPATH TRUE
+    )
+    set(CMAKE_FRAMEWORK_PATH "${CMAKE_BINARY_DIR}" ${CMAKE_FRAMEWORK_PATH})
+  endif()
   find_package(Qt6 COMPONENTS Widgets Core Network)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
+  if(OS_MACOS)
+    add_dependencies(${CMAKE_PROJECT_NAME} agl_stub)
+    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE "LINKER:-F,${CMAKE_BINARY_DIR}")
+  endif()
   target_compile_options(
     ${CMAKE_PROJECT_NAME}
     PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header -Wno-comma>

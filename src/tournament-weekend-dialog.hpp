@@ -21,6 +21,7 @@ class QDateTimeEdit;
 class QCheckBox;
 class QLabel;
 class QPushButton;
+class QComboBox;
 class YouTubeApiClient;
 
 struct WeekendGameEntry {
@@ -52,16 +53,25 @@ private:
 	void startCreateAll();
 	void onBroadcastCreated(const QString &broadcastId);
 	void onStreamBound();
+	void onThumbnailDone();
 	void onYtError(const QString &message);
+	void advanceToNextOrFinish();
 
 	YouTubeApiClient *m_ytClient = nullptr;
 	QLineEdit *m_tournamentEdit = nullptr;
 	QLineEdit *m_teamNameEdit = nullptr;
 	QSpinBox *m_gameCountSpin = nullptr;
 	QTabWidget *m_tabWidget = nullptr;
+	QComboBox *m_privacyCombo = nullptr;
+	QCheckBox *m_madeForKidsCheck = nullptr;
+	QLineEdit *m_thumbnailEdit = nullptr;
 	QCheckBox *m_rememberCheck = nullptr;
 	QLabel *m_statusLabel = nullptr;
 	QPushButton *m_createAllButton = nullptr;
+
+	QString m_currentBroadcastId;
+	QMetaObject::Connection m_thumbnailSetConn;
+	QMetaObject::Connection m_thumbnailErrorConn;
 
 	struct GameTabWidgets {
 		QLineEdit *opponentEdit = nullptr;

@@ -58,11 +58,14 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "==> Using C compiler: $CMAKE_C_COMPILER"
 fi
 
-# If build dir was previously configured with Xcode but we use Ninja preset, clear cache to avoid generator mismatch
+# If build dir was previously configured with a non-Ninja generator, clear cache so preset's Ninja is used
 BUILD_DIR="$ROOT/build_macos"
-if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] && grep -q "CMAKE_GENERATOR:INTERNAL=Xcode" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
-  echo "==> Clearing Xcode cache so Ninja preset can configure..."
-  rm -rf "$BUILD_DIR/CMakeCache.txt" "$BUILD_DIR/CMakeFiles"
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]]; then
+  CACHED_GEN="$(grep -s "CMAKE_GENERATOR:INTERNAL=" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | sed 's/.*=//')"
+  if [[ -n "$CACHED_GEN" && "$CACHED_GEN" != "Ninja" ]]; then
+    echo "==> Clearing cache (generator was '$CACHED_GEN') so Ninja preset can configure..."
+    rm -rf "$BUILD_DIR/CMakeCache.txt" "$BUILD_DIR/CMakeFiles"
+  fi
 fi
 
 echo "==> Configuring (macOS preset)..."

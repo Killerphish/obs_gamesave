@@ -58,8 +58,8 @@ function(_setup_obs_studio)
     set(_cmake_arch "-A ${arch},version=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
     set(_cmake_extra "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION} -DCMAKE_ENABLE_SCRIPTING=OFF")
   elseif(OS_MACOS)
-    # Use Ninja so we don't require Xcode (avoids broken IDESimulatorFoundation/DVTDownloads).
-    set(_cmake_generator "Ninja")
+    # OBS's macOS CMake requires Xcode generator; use Xcode so the dependency build succeeds.
+    set(_cmake_generator "Xcode")
     set(_cmake_arch "-DCMAKE_OSX_ARCHITECTURES:STRING=arm64;x86_64")
     set(_cmake_extra "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
     if(CMAKE_C_COMPILER)
@@ -68,7 +68,7 @@ function(_setup_obs_studio)
     if(CMAKE_CXX_COMPILER)
       list(APPEND _cmake_extra "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
     endif()
-    set(_obs_use_ninja TRUE)
+    set(_obs_use_ninja FALSE)
   endif()
 
   if(_obs_use_ninja)
@@ -125,6 +125,11 @@ function(_setup_obs_studio)
     endforeach()
     unset(ENV{DEVELOPER_DIR})
   else()
+    # So OBS configure uses Xcode (not Command Line Tools), unset DEVELOPER_DIR for subprocess.
+    if(DEFINED ENV{DEVELOPER_DIR})
+      set(_saved_developer_dir "$ENV{DEVELOPER_DIR}")
+      unset(ENV{DEVELOPER_DIR})
+    endif()
     message(STATUS "Configure ${label} (${arch})")
     execute_process(
       COMMAND
@@ -177,6 +182,9 @@ function(_setup_obs_studio)
       OUTPUT_QUIET
     )
     message(STATUS "Install ${label} (${arch}) - done")
+    if(DEFINED _saved_developer_dir)
+      set(ENV{DEVELOPER_DIR} "${_saved_developer_dir}")
+    endif()
   endif()
 endfunction()
 

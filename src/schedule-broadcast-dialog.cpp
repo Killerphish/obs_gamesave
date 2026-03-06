@@ -14,6 +14,9 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QFormLayout>
 #include <QPushButton>
 #include <QGroupBox>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QFileDialog>
 
 ScheduleBroadcastDialog::ScheduleBroadcastDialog(QWidget *parent)
 	: QDialog(parent)
@@ -40,6 +43,32 @@ ScheduleBroadcastDialog::ScheduleBroadcastDialog(QWidget *parent)
 	m_scheduledEdit->setDateTime(QDateTime::currentDateTime().addSecs(3600));
 	m_scheduledEdit->setDisplayFormat(tr("yyyy-MM-dd hh:mm"));
 	ytForm->addRow(tr("Scheduled start:"), m_scheduledEdit);
+
+	m_privacyCombo = new QComboBox(this);
+	m_privacyCombo->addItem(tr("Public"), QStringLiteral("public"));
+	m_privacyCombo->addItem(tr("Unlisted"), QStringLiteral("unlisted"));
+	m_privacyCombo->addItem(tr("Private"), QStringLiteral("private"));
+	ytForm->addRow(tr("Privacy:"), m_privacyCombo);
+
+	m_madeForKidsCheck = new QCheckBox(tr("Made for kids"), this);
+	m_madeForKidsCheck->setChecked(false);
+	ytForm->addRow(QString(), m_madeForKidsCheck);
+
+	m_thumbnailEdit = new QLineEdit(this);
+	m_thumbnailEdit->setPlaceholderText(tr("Optional thumbnail image (JPEG or PNG, max 2 MB)"));
+	m_thumbnailEdit->setClearButtonEnabled(true);
+	QHBoxLayout *thumbRow = new QHBoxLayout();
+	thumbRow->addWidget(m_thumbnailEdit);
+	QPushButton *browseBtn = new QPushButton(tr("Browse…"), this);
+	connect(browseBtn, &QPushButton::clicked, this, [this]() {
+		QString path = QFileDialog::getOpenFileName(this, tr("Select thumbnail image"), QString(),
+							    tr("Images (*.png *.jpg *.jpeg);;All files (*)"));
+		if (!path.isEmpty()) {
+			m_thumbnailEdit->setText(path);
+		}
+	});
+	thumbRow->addWidget(browseBtn);
+	ytForm->addRow(tr("Thumbnail:"), thumbRow);
 
 	layout->addWidget(ytGroup);
 
@@ -102,6 +131,21 @@ QDateTime ScheduleBroadcastDialog::scheduledStartTime() const
 QString ScheduleBroadcastDialog::tournamentName() const
 {
 	return m_tournamentEdit->text().trimmed();
+}
+
+QString ScheduleBroadcastDialog::privacyStatus() const
+{
+	return m_privacyCombo->currentData().toString();
+}
+
+bool ScheduleBroadcastDialog::selfDeclaredMadeForKids() const
+{
+	return m_madeForKidsCheck->isChecked();
+}
+
+QString ScheduleBroadcastDialog::thumbnailPath() const
+{
+	return m_thumbnailEdit->text().trimmed();
 }
 
 void ScheduleBroadcastDialog::setTournamentName(const QString &name)

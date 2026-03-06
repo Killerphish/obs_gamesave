@@ -17,6 +17,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QMessageBox>
 #include <QTabWidget>
@@ -24,7 +25,8 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QDateTimeEdit>
 #include <QCheckBox>
 #include <QLabel>
-#include <QScrollArea>
+#include <QComboBox>
+#include <QFileDialog>
 
 static const char *kConfigSection = "TournamentSetup";
 static const int kMinGames = 1;
@@ -54,6 +56,32 @@ TournamentWeekendDialog::TournamentWeekendDialog(YouTubeApiClient *ytClient, QWi
 	m_gameCountSpin->setRange(kMinGames, kMaxGames);
 	m_gameCountSpin->setValue(5);
 	topForm->addRow(tr("Number of games:"), m_gameCountSpin);
+
+	m_privacyCombo = new QComboBox(this);
+	m_privacyCombo->addItem(tr("Public"), QStringLiteral("public"));
+	m_privacyCombo->addItem(tr("Unlisted"), QStringLiteral("unlisted"));
+	m_privacyCombo->addItem(tr("Private"), QStringLiteral("private"));
+	topForm->addRow(tr("Privacy:"), m_privacyCombo);
+
+	m_madeForKidsCheck = new QCheckBox(tr("Made for kids"), this);
+	m_madeForKidsCheck->setChecked(false);
+	topForm->addRow(QString(), m_madeForKidsCheck);
+
+	m_thumbnailEdit = new QLineEdit(this);
+	m_thumbnailEdit->setPlaceholderText(tr("Optional thumbnail (JPEG or PNG, max 2 MB) for all games"));
+	m_thumbnailEdit->setClearButtonEnabled(true);
+	QHBoxLayout *thumbRow = new QHBoxLayout();
+	thumbRow->addWidget(m_thumbnailEdit);
+	QPushButton *browseBtn = new QPushButton(tr("Browse…"), this);
+	connect(browseBtn, &QPushButton::clicked, this, [this]() {
+		QString path = QFileDialog::getOpenFileName(this, tr("Select thumbnail image"), QString(),
+							    tr("Images (*.png *.jpg *.jpeg);;All files (*)"));
+		if (!path.isEmpty()) {
+			m_thumbnailEdit->setText(path);
+		}
+	});
+	thumbRow->addWidget(browseBtn);
+	topForm->addRow(tr("Thumbnail:"), thumbRow);
 
 	layout->addWidget(topGroup);
 
@@ -293,6 +321,8 @@ void TournamentWeekendDialog::startCreateAll()
 
 	QString tournament = m_tournamentEdit->text().trimmed();
 	QString team = m_teamNameEdit->text().trimmed();
+	QString privacy = m_privacyCombo->currentData().toString();
+	bool madeForKids = m_madeForKidsCheck->isChecked();
 
 	const WeekendGameEntry &e = m_createQueue[m_createIndex];
 	QString title = team + " vs " + e.opponent;
@@ -302,18 +332,38 @@ void TournamentWeekendDialog::startCreateAll()
 	m_boundConn = connect(m_ytClient, &YouTubeApiClient::streamBound, this, &TournamentWeekendDialog::onStreamBound);
 	m_errorConn = connect(m_ytClient, &YouTubeApiClient::error, this, &TournamentWeekendDialog::onYtError);
 
-	m_ytClient->createBroadcast(title, description, e.scheduledTime);
+	m_ytClient->createBroadcast(title, description, e.scheduledTime, privacy, madeForKids);
 }
 
 void TournamentWeekendDialog::onBroadcastCreated(const QString &broadcastId)
 {
 	disconnect(m_createdConn);
+	m_currentBroadcastId = broadcastId;
 	m_ytClient->ensureStreamBound(broadcastId);
 }
 
 void TournamentWeekendDialog::onStreamBound()
 {
 	disconnect(m_boundConn);
+	QString thumbnailPath = m_thumbnailEdit->text().trimmed();
+	if (!thumbnailPath.isEmpty() && !m_currentBroadcastId.isEmpty()) {
+		m_thumbnailSetConn = connect(m_ytClient, &YouTubeApiClient::thumbnailSet, this, &TournamentWeekendDialog::onThumbnailDone);
+		m_thumbnailErrorConn = connect(m_ytClient, &YouTubeApiClient::error, this, &TournamentWeekendDialog::onThumbnailDone);
+		m_ytClient->setBroadcastThumbnail(m_currentBroadcastId, thumbnailPath);
+		return;
+	}
+	advanceToNextOrFinish();
+}
+
+void TournamentWeekendDialog::onThumbnailDone()
+{
+	disconnect(m_thumbnailSetConn);
+	disconnect(m_thumbnailErrorConn);
+	advanceToNextOrFinish();
+}
+
+void TournamentWeekendDialog::advanceToNextOrFinish()
+{
 	m_broadcastsCreated = true;
 	++m_createIndex;
 
@@ -332,6 +382,8 @@ void TournamentWeekendDialog::onStreamBound()
 
 	QString tournament = m_tournamentEdit->text().trimmed();
 	QString team = m_teamNameEdit->text().trimmed();
+	QString privacy = m_privacyCombo->currentData().toString();
+	bool madeForKids = m_madeForKidsCheck->isChecked();
 	const WeekendGameEntry &e = m_createQueue[m_createIndex];
 	QString title = team + " vs " + e.opponent;
 	QString description = e.rinkName.isEmpty() ? tournament : (tournament + " - " + e.rinkName);
@@ -339,7 +391,7 @@ void TournamentWeekendDialog::onStreamBound()
 	m_createdConn = connect(m_ytClient, &YouTubeApiClient::broadcastCreated, this, &TournamentWeekendDialog::onBroadcastCreated);
 	m_boundConn = connect(m_ytClient, &YouTubeApiClient::streamBound, this, &TournamentWeekendDialog::onStreamBound);
 
-	m_ytClient->createBroadcast(title, description, e.scheduledTime);
+	m_ytClient->createBroadcast(title, description, e.scheduledTime, privacy, madeForKids);
 }
 
 void TournamentWeekendDialog::onYtError(const QString &message)
@@ -347,6 +399,8 @@ void TournamentWeekendDialog::onYtError(const QString &message)
 	disconnect(m_createdConn);
 	disconnect(m_boundConn);
 	disconnect(m_errorConn);
+	disconnect(m_thumbnailSetConn);
+	disconnect(m_thumbnailErrorConn);
 	m_createAllButton->setEnabled(true);
 	m_statusLabel->setText(tr("Error: %1").arg(message));
 	QMessageBox::warning(this, tr("YouTube"), message);

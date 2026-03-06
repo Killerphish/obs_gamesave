@@ -19,6 +19,7 @@ the Free Software Foundation; either version 2 of the License, or
 #include <util/config-file.h>
 #include <util/platform.h>
 #include <QMessageBox>
+#include <QLocale>
 
 static const int kComboIndexScheduleBroadcast = 0;
 static const int kComboDataBroadcastId = Qt::UserRole;
@@ -159,19 +160,38 @@ void GameSaveDock::onLoadOrNewClicked()
 		QString description = dlg.description();
 		QDateTime scheduled = dlg.scheduledStartTime();
 		QString tournament = dlg.tournamentName();
+		QString privacy = dlg.privacyStatus();
+		bool madeForKids = dlg.selfDeclaredMadeForKids();
+		QString thumbnailPath = dlg.thumbnailPath();
 		if (title.isEmpty()) {
 			setStatus(tr("Enter a broadcast title."));
 			return;
 		}
 		setTournamentName(tournament);
-		m_ytClient->createBroadcast(title, description, scheduled);
-		connect(m_ytClient, &YouTubeApiClient::broadcastCreated, this, [this, title](const QString &broadcastId) {
+		m_ytClient->createBroadcast(title, description, scheduled, privacy, madeForKids);
+		connect(m_ytClient, &YouTubeApiClient::broadcastCreated, this, [this, thumbnailPath](const QString &broadcastId) {
 			disconnect(m_ytClient, &YouTubeApiClient::broadcastCreated, this, nullptr);
 			m_ytClient->ensureStreamBound(broadcastId);
-			connect(m_ytClient, &YouTubeApiClient::streamBound, this, [this]() {
+			connect(m_ytClient, &YouTubeApiClient::streamBound, this, [this, broadcastId, thumbnailPath]() {
 				disconnect(m_ytClient, &YouTubeApiClient::streamBound, this, nullptr);
-				setStatus(tr("Broadcast scheduled. Refreshing list."));
-				refreshBroadcastList();
+				if (!thumbnailPath.isEmpty()) {
+					connect(m_ytClient, &YouTubeApiClient::thumbnailSet, this, [this]() {
+						disconnect(m_ytClient, &YouTubeApiClient::thumbnailSet, this, nullptr);
+						disconnect(m_ytClient, &YouTubeApiClient::error, this, nullptr);
+						setStatus(tr("Broadcast scheduled. Refreshing list."));
+						refreshBroadcastList();
+					});
+					connect(m_ytClient, &YouTubeApiClient::error, this, [this](const QString &) {
+						disconnect(m_ytClient, &YouTubeApiClient::thumbnailSet, this, nullptr);
+						disconnect(m_ytClient, &YouTubeApiClient::error, this, nullptr);
+						setStatus(tr("Broadcast scheduled (thumbnail failed). Refreshing list."));
+						refreshBroadcastList();
+					});
+					m_ytClient->setBroadcastThumbnail(broadcastId, thumbnailPath);
+				} else {
+					setStatus(tr("Broadcast scheduled. Refreshing list."));
+					refreshBroadcastList();
+				}
 			});
 		});
 		return;
@@ -215,14 +235,14 @@ void GameSaveDock::onSetupWeekendClicked()
 
 void GameSaveDock::onBroadcastsListed(const QList<YouTubeBroadcast> &broadcasts)
 {
-	int currentId = m_broadcastCombo->itemData(m_broadcastCombo->currentIndex(), kComboDataBroadcastId).toString();
+	QString currentId = m_broadcastCombo->itemData(m_broadcastCombo->currentIndex(), kComboDataBroadcastId).toString();
 	while (m_broadcastCombo->count() > 1) {
 		m_broadcastCombo->removeItem(m_broadcastCombo->count() - 1);
 	}
 	for (const YouTubeBroadcast &b : broadcasts) {
 		QString display = b.title.isEmpty() ? b.id : b.title;
 		if (b.scheduledStartTime.isValid()) {
-			display += " (" + b.scheduledStartTime.toString(Qt::DefaultLocaleShortDate) + ")";
+			display += " (" + QLocale().toString(b.scheduledStartTime, QLocale::ShortFormat) + ")";
 		}
 		int idx = m_broadcastCombo->count();
 		m_broadcastCombo->addItem(display);

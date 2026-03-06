@@ -16,9 +16,11 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QUrlQuery>
 #include <QDesktopServices>
 #include <QUrl>
+#include <QNetworkReply>
 #include <QTcpSocket>
 #include <QTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QDir>
 #include <QUuid>
 #include <cctype>
@@ -28,6 +30,7 @@ static const char kTokenEndpoint[] = "https://oauth2.googleapis.com/token";
 static const char kScope[] = "https://www.googleapis.com/auth/youtube.force-ssl";
 static const char kLiveBroadcastsUrl[] = "https://www.googleapis.com/youtube/v3/liveBroadcasts";
 static const char kLiveStreamsUrl[] = "https://www.googleapis.com/youtube/v3/liveStreams";
+static const char kThumbnailsSetUrl[] = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set";
 
 // Default client ID for desktop OAuth (user can override via config).
 // Using a placeholder; in production use a Google Cloud OAuth 2.0 Desktop client ID.
@@ -136,7 +139,7 @@ void YouTubeApiClient::startAuth()
 	q.addQueryItem("access_type", "offline");
 	q.addQueryItem("prompt", "consent");
 
-	QUrl url(QLatin1String(kAuthEndpoint));
+	QUrl url(QString::fromLatin1(kAuthEndpoint));
 	url.setQuery(q);
 
 	connect(m_redirectServer, &QTcpServer::newConnection, this, [this, redirectUri]() {
@@ -196,7 +199,7 @@ void YouTubeApiClient::exchangeCodeForTokens(const QString &code)
 		redirectUri = "http://127.0.0.1/";
 	}
 
-	QUrl url(QLatin1String(kTokenEndpoint));
+	QUrl url(QString::fromLatin1(kTokenEndpoint));
 	QNetworkRequest req(url);
 	req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
@@ -247,7 +250,7 @@ void YouTubeApiClient::refreshAccessToken()
 		return;
 	}
 
-	QUrl url(QLatin1String(kTokenEndpoint));
+	QUrl url((QLatin1String(kTokenEndpoint)));
 	QNetworkRequest req(url);
 	req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
@@ -311,7 +314,7 @@ void YouTubeApiClient::listUpcomingBroadcasts()
 		return;
 	}
 
-	QUrl url(QLatin1String(kLiveBroadcastsUrl));
+	QUrl url(QString::fromLatin1(kLiveBroadcastsUrl));
 	QUrlQuery q;
 	q.addQueryItem("part", "snippet,contentDetails,status");
 	q.addQueryItem("broadcastStatus", "upcoming");
@@ -379,7 +382,7 @@ void YouTubeApiClient::fetchStreamKey(const QString &broadcastId, const QString 
 		return;
 	}
 
-	QUrl url(QLatin1String(kLiveStreamsUrl));
+	QUrl url(QString::fromLatin1(kLiveStreamsUrl));
 	QUrlQuery q;
 	q.addQueryItem("part", "cdn");
 	q.addQueryItem("id", streamId);
@@ -420,14 +423,23 @@ void YouTubeApiClient::fetchStreamKey(const QString &broadcastId, const QString 
 }
 
 void YouTubeApiClient::createBroadcast(const QString &title, const QString &description,
-				       const QDateTime &scheduledStartTime)
+				       const QDateTime &scheduledStartTime,
+				       const QString &privacyStatus, bool selfDeclaredMadeForKids)
 {
 	if (m_accessToken.isEmpty()) {
 		emit error(tr("Not signed in or token expired."));
 		return;
 	}
 
-	QUrl url(QLatin1String(kLiveBroadcastsUrl));
+	QString privacy = privacyStatus.trimmed().toLower();
+	if (privacy.isEmpty()) {
+		privacy = QStringLiteral("public");
+	}
+	if (privacy != QLatin1String("public") && privacy != QLatin1String("unlisted") && privacy != QLatin1String("private")) {
+		privacy = QStringLiteral("public");
+	}
+
+	QUrl url(QString::fromLatin1(kLiveBroadcastsUrl));
 	QUrlQuery q;
 	q.addQueryItem("part", "snippet,status,contentDetails");
 	url.setQuery(q);
@@ -438,8 +450,8 @@ void YouTubeApiClient::createBroadcast(const QString &title, const QString &desc
 	snippet.insert("scheduledStartTime", scheduledStartTime.toUTC().toString(Qt::ISODate));
 
 	QJsonObject status;
-	status.insert("privacyStatus", "public");
-	status.insert("selfDeclaredMadeForKids", false);
+	status.insert("privacyStatus", privacy);
+	status.insert("selfDeclaredMadeForKids", selfDeclaredMadeForKids);
 
 	QJsonObject root;
 	root.insert("snippet", snippet);
@@ -480,7 +492,7 @@ void YouTubeApiClient::ensureStreamBound(const QString &broadcastId)
 	}
 
 	// First list streams to get an existing stream id, or create one
-	QUrl listUrl(QLatin1String(kLiveStreamsUrl));
+	QUrl listUrl(QString::fromLatin1(kLiveStreamsUrl));
 	QUrlQuery listQ;
 	listQ.addQueryItem("part", "id");
 	listQ.addQueryItem("mine", "true");
@@ -503,7 +515,7 @@ void YouTubeApiClient::ensureStreamBound(const QString &broadcastId)
 		}
 		if (streamId.isEmpty()) {
 			// Create a new stream
-			QUrl createUrl(QLatin1String(kLiveStreamsUrl));
+			QUrl createUrl(QString::fromLatin1(kLiveStreamsUrl));
 			QUrlQuery createQ;
 			createQ.addQueryItem("part", "snippet,cdn");
 			createUrl.setQuery(createQ);
@@ -537,7 +549,7 @@ void YouTubeApiClient::ensureStreamBound(const QString &broadcastId)
 
 void YouTubeApiClient::doBind(const QString &broadcastId, const QString &streamId)
 {
-	QUrl url(QLatin1String(kLiveBroadcastsUrl) + "/bind");
+	QUrl url(QString::fromLatin1(kLiveBroadcastsUrl) + "/bind");
 	QUrlQuery q;
 	q.addQueryItem("part", "id,contentDetails");
 	q.addQueryItem("id", broadcastId);
@@ -556,5 +568,55 @@ void YouTubeApiClient::doBind(const QString &broadcastId, const QString &streamI
 			return;
 		}
 		emit streamBound();
+	});
+}
+
+void YouTubeApiClient::setBroadcastThumbnail(const QString &videoId, const QString &imagePath)
+{
+	if (m_accessToken.isEmpty()) {
+		emit error(tr("Not signed in or token expired."));
+		return;
+	}
+	if (videoId.isEmpty() || imagePath.isEmpty()) {
+		return;
+	}
+
+	QFile file(imagePath);
+	if (!file.open(QIODevice::ReadOnly)) {
+		emit error(tr("Could not open thumbnail file: %1").arg(file.errorString()));
+		return;
+	}
+	QByteArray imageData = file.readAll();
+	file.close();
+	if (imageData.size() > 2 * 1024 * 1024) {
+		emit error(tr("Thumbnail file is larger than 2 MB."));
+		return;
+	}
+
+	QString mimeType = QStringLiteral("image/jpeg");
+	QString suffix = QFileInfo(imagePath).suffix().toLower();
+	if (suffix == QLatin1String("png")) {
+		mimeType = QStringLiteral("image/png");
+	} else if (suffix == QLatin1String("jpg") || suffix == QLatin1String("jpeg")) {
+		mimeType = QStringLiteral("image/jpeg");
+	}
+
+	QUrl url(QString::fromLatin1(kThumbnailsSetUrl));
+	QUrlQuery q;
+	q.addQueryItem("videoId", videoId);
+	url.setQuery(q);
+
+	QNetworkRequest req(url);
+	req.setHeader(QNetworkRequest::ContentTypeHeader, mimeType);
+	req.setRawHeader("Authorization", "Bearer " + m_accessToken.toUtf8());
+
+	QNetworkReply *reply = m_network->post(req, imageData);
+	connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+		reply->deleteLater();
+		if (reply->error() != QNetworkReply::NoError) {
+			emit error(tr("Failed to set thumbnail: %1").arg(reply->errorString()));
+			return;
+		}
+		emit thumbnailSet();
 	});
 }

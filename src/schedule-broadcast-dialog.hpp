@@ -16,6 +16,9 @@ the Free Software Foundation; either version 2 of the License, or
 #include <QDateTimeEdit>
 #include <QLabel>
 
+class QComboBox;
+class QCheckBox;
+
 class ScheduleBroadcastDialog : public QDialog {
 	Q_OBJECT
 
@@ -27,6 +30,9 @@ public:
 	QString description() const;
 	QDateTime scheduledStartTime() const;
 	QString tournamentName() const;
+	QString privacyStatus() const;
+	bool selfDeclaredMadeForKids() const;
+	QString thumbnailPath() const;
 
 	void setTournamentName(const QString &name);
 
@@ -34,6 +40,9 @@ private:
 	QLineEdit *m_titleEdit = nullptr;
 	QTextEdit *m_descriptionEdit = nullptr;
 	QDateTimeEdit *m_scheduledEdit = nullptr;
+	QComboBox *m_privacyCombo = nullptr;
+	QCheckBox *m_madeForKidsCheck = nullptr;
+	QLineEdit *m_thumbnailEdit = nullptr;
 	QLineEdit *m_tournamentEdit = nullptr;
 	QLabel *m_statusLabel = nullptr;
 };

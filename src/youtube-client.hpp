@@ -51,10 +51,15 @@ public:
 	void fetchStreamKey(const QString &broadcastId, const QString &boundStreamId);
 
 	// Create a new broadcast. Emits broadcastCreated(QString broadcastId) or error(QString).
-	void createBroadcast(const QString &title, const QString &description, const QDateTime &scheduledStartTime);
+	// privacyStatus: "public", "unlisted", or "private".
+	void createBroadcast(const QString &title, const QString &description, const QDateTime &scheduledStartTime,
+			    const QString &privacyStatus = QString("public"), bool selfDeclaredMadeForKids = false);
 
 	// After createBroadcast, bind a stream (create stream if needed). Emits streamBound() or error(QString).
 	void ensureStreamBound(const QString &broadcastId);
+
+	// Set custom thumbnail for a broadcast (videoId). Emits thumbnailSet() or error(QString). Image: JPEG or PNG, max 2MB.
+	void setBroadcastThumbnail(const QString &videoId, const QString &imagePath);
 
 	// Set OAuth client ID (from config or build). Required before startAuth().
 	void setClientId(const QString &clientId) { m_clientId = clientId; }
@@ -66,6 +71,7 @@ Q_SIGNALS:
 	void streamKeyReceived(const YouTubeStreamKey &key);
 	void broadcastCreated(const QString &broadcastId);
 	void streamBound();
+	void thumbnailSet();
 	void tokenRefreshed();
 	void error(const QString &message);
 

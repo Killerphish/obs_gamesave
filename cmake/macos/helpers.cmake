@@ -13,6 +13,9 @@ function(set_target_properties_plugin target)
 
   message(DEBUG "Setting additional properties for target ${target}...")
 
+  # OBS provides symbols (e.g. obs_current_module) when the plugin bundle is loaded.
+  target_link_options(${target} PRIVATE "LINKER:-undefined,dynamic_lookup")
+
   while(_STPO_PROPERTIES)
     list(POP_FRONT _STPO_PROPERTIES key value)
     set_property(TARGET ${target} PROPERTY ${key} "${value}")

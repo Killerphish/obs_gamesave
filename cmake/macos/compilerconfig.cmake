@@ -7,7 +7,13 @@ mark_as_advanced(ENABLE_COMPILER_TRACE)
 
 # Xcode generator required for full OBS Studio; Ninja allowed for standalone plugin build
 if(NOT XCODE AND NOT CMAKE_GENERATOR STREQUAL "Ninja")
-  message(FATAL_ERROR "Building OBS Studio on macOS requires Xcode or Ninja generator.")
+  message(
+    FATAL_ERROR
+    "Building on macOS requires the Ninja or Xcode generator. "
+    "Current generator: ${CMAKE_GENERATOR}. "
+    "From the project root run: ./scripts/build.sh (uses the macos preset with Ninja). "
+    "Or configure with: cmake --preset macos"
+  )
 endif()
 
 include(ccache)
