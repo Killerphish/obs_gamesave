@@ -14,6 +14,8 @@ the Free Software Foundation; either version 2 of the License, or
 #include "game-save-dock.hpp"
 #include <QMainWindow>
 
+OBS_DECLARE_MODULE()
+
 static GameSaveDock *s_dock = nullptr;
 
 static void on_frontend_event(enum obs_frontend_event event, void *data)

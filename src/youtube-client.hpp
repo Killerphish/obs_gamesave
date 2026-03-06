@@ -77,6 +77,7 @@ Q_SIGNALS:
 
 private:
 	QString configPath() const;
+	void loadClientCredentials();
 	void loadTokens();
 	void saveTokens();
 	void exchangeCodeForTokens(const QString &code);

@@ -42,6 +42,7 @@ YouTubeApiClient::YouTubeApiClient(QObject *parent)
 	, m_network(new QNetworkAccessManager(this))
 {
 	m_redirectServer = new QTcpServer(this);
+	loadClientCredentials();
 	loadTokens();
 }
 
@@ -56,6 +57,31 @@ QString YouTubeApiClient::configPath() const
 	QString qpath = QString::fromUtf8(path);
 	bfree(path);
 	return qpath;
+}
+
+void YouTubeApiClient::loadClientCredentials()
+{
+	QString oauthPath = configPath();
+	if (oauthPath.isEmpty()) {
+		return;
+	}
+	QString dir = QFileInfo(oauthPath).absolutePath();
+	QFile f(dir + QStringLiteral("/youtube_client.json"));
+	if (!f.open(QIODevice::ReadOnly)) {
+		return;
+	}
+	QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+	f.close();
+	if (!doc.isObject()) {
+		return;
+	}
+	QJsonObject o = doc.object();
+	QString id = o.value("client_id").toString().trimmed();
+	QString secret = o.value("client_secret").toString().trimmed();
+	if (!id.isEmpty() && id != QLatin1String(kDefaultClientId)) {
+		m_clientId = id;
+		m_clientSecret = secret;
+	}
 }
 
 void YouTubeApiClient::loadTokens()

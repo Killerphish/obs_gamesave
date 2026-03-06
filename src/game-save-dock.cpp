@@ -72,7 +72,10 @@ GameSaveDock::GameSaveDock(QWidget *parent) : QWidget(parent)
 			setStatus(tr("Signed in to YouTube"));
 			refreshBroadcastList();
 		} else {
-			setStatus(m_ytClient->authError());
+			QString err = m_ytClient->authError();
+			setStatus(err);
+			QMessageBox::warning(this, tr("YouTube sign-in"), err + "\n\n" +
+				tr("To sign in: create a file \"youtube_client.json\" in the GameSave plugin config folder (same folder as youtube_oauth.json) with \"client_id\" and \"client_secret\" from Google Cloud Console (OAuth 2.0 Desktop app). OBS's built-in YouTube stream key cannot be used for listing or creating broadcasts."));
 		}
 	});
 

@@ -55,6 +55,8 @@ TournamentWeekendDialog::TournamentWeekendDialog(YouTubeApiClient *ytClient, QWi
 	m_gameCountSpin = new QSpinBox(this);
 	m_gameCountSpin->setRange(kMinGames, kMaxGames);
 	m_gameCountSpin->setValue(5);
+	m_gameCountSpin->setMinimumWidth(80);
+	m_gameCountSpin->setMinimumHeight(28);
 	topForm->addRow(tr("Number of games:"), m_gameCountSpin);
 
 	m_privacyCombo = new QComboBox(this);
